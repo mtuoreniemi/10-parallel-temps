@@ -64,7 +64,7 @@ public class TemperatureWorker extends Thread {
      */
     public double average() {
         // TODO: return runningAverage. It is 0 until the first reading is folded in.
-        return 0;
+        return runningAverage;
     }
 
     @Override
@@ -74,5 +74,17 @@ public class TemperatureWorker extends Thread {
          * Add each reading to sum, publish runningAverage = sum / seen, then
          * set checked = seen. Do not print and do not call Thread.sleep.
          */
+
+        while (true) {
+            OptionalDouble reading = source.next();
+            if (reading.isEmpty()) {
+                break;
+            }
+            sum += reading.getAsDouble();
+            int seen = checked + 1;
+
+            runningAverage = sum / seen;
+            checked = seen;
+        }
     }
 }

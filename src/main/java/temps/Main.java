@@ -1,6 +1,7 @@
 package temps;
 
 import java.io.IOException;
+import java.util.Locale;
 
 /**
  * Draws two ASCII temperature bars while Las Palmas and Helsinki temperatures
@@ -74,7 +75,9 @@ public class Main {
             String secondCity, int secondChecked, int secondTotal, double secondAverage) {
         // TODO: build the two-line frame described in the readme and above.
         // An empty bar (checked == 0) is not the same as a 0 °C average.
-        return "";
+        return line(firstCity, firstChecked, firstTotal, firstAverage)
+        + "\n"
+        + line(secondCity, secondChecked, secondTotal, secondAverage);
     }
 
     /**
@@ -106,6 +109,39 @@ public class Main {
         }
         return filled;
     }
+
+    // ROW LABEL APUMETODI RIVIN OTSIKOLLE
+    public static String rowLabel(int checked) {
+        if(checked >= 1_000_000) {
+            return String.format(Locale.ROOT, "%.1fM", checked / 1_000_000.0);
+        }
+        if(checked > 1_000) {
+            return (checked / 1_000) + "k";
+        }
+        return Integer.toString(Math.max(checked, 0));
+    }
+    // APUMETODI PROSENTIN KIRJOITTAMISEEN
+    public static int percent(int checked, int total) {
+        // NOLLA TAI SATA, JOS ON VÄLILTÄ OTETAAN ARVO VAIN KOKONAISLUKUNA
+        // JA TRUNCATE DESIMAALIT POIS ELI EI PYÖRISTYSTÄ
+        if(total <= 0 || checked <= 0) {
+            return 0;
+        }
+        if(checked >= total) {
+            return 100;
+        }
+        return (int)((long)checked * 100 / total);
+    }
+
+    // APUMETODI RIVIN KIRJOITTAMISEEN
+    private static String line(String city, int checked, int total, double average) {
+        int filled = checked <= 0 ? 0 : temperatureBarLength(average);
+        String bar = "#".repeat(filled) + "-".repeat(BAR_WIDTH - filled);
+        return String.format(Locale.ROOT, "%-10s |%s|%5.1f°C %4s %3d%%",
+            city, bar, average, rowLabel(checked), percent(checked, total));
+    }
+
+   
 
     /**
      * Runs the full live chart. Both cities process
@@ -157,8 +193,67 @@ public class Main {
          * When both workers have finished, call join() on both. Then read
          * average() and return the final frame from showProgress.
          */
-        return "";
+
+        // TEHDÄÄN KAKSI TEMPERATURE WORKERIA, JOTKA ASETETAAN OMAAN LAMPOTILA
+        // LÄHTEESEENSÄ JA NIILLE ASETETAAN SEN KAUPUNGIN NIMI, JOTA NE KUVAAVAT
+
+        // IHAN ENSIN TARVITAAN TEMPERATURE SOURCET JOSTA LUKEA LÄMPÖTILAT
+        TemperatureSource lasPalmasSource = TemperatureData.
+            open(TemperatureData.LAS_PALMAS, feedDelayMillis, rows);
+        TemperatureSource helsinkiSource = TemperatureData.
+            open(TemperatureData.HELSINKI, feedDelayMillis, rows);
+
+        TemperatureWorker lasPalmas = new TemperatureWorker("Las Palmas", lasPalmasSource);
+        TemperatureWorker helsinki = new TemperatureWorker("Helsinki", helsinkiSource);
+        // SÄIKEITÄ VOI KÄYNNISTÄÄ NYT START-METODILLA
+        lasPalmas.start();
+        helsinki.start();
+
+        // LÄMPÖTILOJEN SAANTI NÄYTÖLLE NIIN KAUAN KUIN SÄIKEET OVAT HENGISSÄ
+        // ensimmäinen frame on merkittävä, koska lopuksi halutaan tietää onko while
+        // silmukassa käyty
+
+        boolean firstFrame = true;
+
+        // SÄIKEELLE ON KOMENTO/METODI ISALIVE MISTÄ VOI TARKISTAA ETTÄ ONKO
+        // SÄIE KÄYNNISSÄ
+        while(lasPalmas.isAlive() || helsinki.isAlive()) {
+            draw(showProgress(
+                lasPalmas.getCity(), lasPalmas.checked,
+                lasPalmasSource.size(), lasPalmas.runningAverage,
+                helsinki.getCity(), helsinki.checked,
+                helsinkiSource.size(), helsinki.runningAverage), firstFrame
+            );
+            firstFrame = false;
+            Thread.sleep(redrawDelayMillis);
+        }
+        // KUN SÄIKEET OVAT VALMISTUNEET ELI ALIVE EI OLE ENÄÄ TOTTA
+        // JOINATAAN SÄIKEET TAKAISIN TÄHÄN.
+        lasPalmas.join();
+        helsinki.join();
+
+        String finalFrame = showProgress(
+            lasPalmas.getCity(), lasPalmas.checked, lasPalmasSource.size(), lasPalmas.average(),
+            helsinki.getCity(), helsinki.checked, helsinkiSource.size(), helsinki.average()
+        );
+        draw(finalFrame, firstFrame);
+
+        return finalFrame;
     }
+
+    public static void draw(String frame, boolean firstFrame) {
+        StringBuilder out = new StringBuilder();
+        if(!firstFrame) {
+            out.append("\033[2A\r");
+        }
+        for(String line : frame.split("\n")) {
+            out.append(line).append("\033[K\n");
+        }
+        System.out.println(out);
+        System.out.flush();
+    }
+
+
 
     /**
      * Starts the chart. The workers do the arithmetic; this thread only redraws.
