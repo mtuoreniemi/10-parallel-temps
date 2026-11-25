@@ -136,9 +136,9 @@ public class Main {
     // APUMETODI RIVIN KIRJOITTAMISEEN
     private static String line(String city, int checked, int total, double average) {
         int filled = checked <= 0 ? 0 : temperatureBarLength(average);
-        String bar = "#".repeat(filled) + "-".repeat(BAR_WIDTH - filled);
+        String bari = "#".repeat(filled) + "-".repeat(BAR_WIDTH - filled);
         return String.format(Locale.ROOT, "%-10s |%s|%5.1f°C %4s %3d%%",
-            city, bar, average, rowLabel(checked), percent(checked, total));
+            city, bari, average, rowLabel(checked), percent(checked, total));
     }
 
    
